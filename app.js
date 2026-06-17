@@ -888,7 +888,7 @@ function renderBlacklistItems(blacklists) {
         }
         
         let removalLinkHtml = '';
-        if (result.removal_url) {
+        if (result.status === 'listed' && result.removal_url) {
             removalLinkHtml = ` • <a href="${result.removal_url}" target="_blank" rel="noopener noreferrer" class="blacklist-link" title="Ir para a página de remoção desta RBL">Remoção <i data-lucide="external-link" style="width:10px; height:10px; display:inline-block; vertical-align:middle; margin-left:1px;"></i></a>`;
         }
         
