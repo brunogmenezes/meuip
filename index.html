@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeuIP BGP Dashboard - Seu Endereço IP e Status BGP em Tempo Real</title>
+    <meta name="description" content="Verifique seu endereço IPv4 e IPv6, ASN do provedor, bloco IP anunciado mais específico no BGP, status RPKI e listagem em blacklists de spam.">
+    
+    <!-- Google Fonts: Outfit (Interface) e JetBrains Mono (Dados de Rede) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- Custom CSS Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <i data-lucide="globe" class="pulse-icon"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>MeuIP <span>BGP</span></h1>
+                    <p class="tagline">Análise avançada de conectividade e roteamento</p>
+                </div>
+            </div>
+            
+            <div class="connection-status">
+                <div class="status-badge" id="badge-ipv4" data-status="loading">
+                    <span class="status-dot"></span>
+                    <span class="status-label">IPv4: Carregando</span>
+                </div>
+                <div class="status-badge" id="badge-ipv6" data-status="loading">
+                    <span class="status-dot"></span>
+                    <span class="status-label">IPv6: Carregando</span>
+                </div>
+                <button id="btn-refresh" class="btn-refresh" title="Atualizar dados" aria-label="Atualizar dados">
+                    <i data-lucide="rotate-cw"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- HERO: LARGE IP CARDS -->
+        <section class="hero-ips">
+            <!-- IPv4 Card -->
+            <div class="ip-card" id="card-ipv4">
+                <div class="ip-card-header">
+                    <span class="ip-protocol">IPv4</span>
+                    <button class="btn-copy" id="btn-copy-ipv4" data-target="ip-val-ipv4" title="Copiar IPv4" aria-label="Copiar IPv4">
+                        <i data-lucide="copy"></i>
+                    </button>
+                </div>
+                <div class="ip-card-body">
+                    <code class="ip-value" id="ip-val-ipv4">...</code>
+                    <p class="ip-isp" id="isp-ipv4">Carregando provedor...</p>
+                </div>
+                <div class="ip-card-footer">
+                    <div class="ip-status-indicator">
+                        <span class="pulse-indicator green" id="pulse-ipv4"></span>
+                        <span id="indicator-text-ipv4">Detectando...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- IPv6 Card -->
+            <div class="ip-card" id="card-ipv6">
+                <div class="ip-card-header">
+                    <span class="ip-protocol">IPv6</span>
+                    <button class="btn-copy" id="btn-copy-ipv6" data-target="ip-val-ipv6" title="Copiar IPv6" aria-label="Copiar IPv6">
+                        <i data-lucide="copy"></i>
+                    </button>
+                </div>
+                <div class="ip-card-body">
+                    <code class="ip-value" id="ip-val-ipv6">...</code>
+                    <p class="ip-isp" id="isp-ipv6">Carregando provedor...</p>
+                </div>
+                <div class="ip-card-footer">
+                    <div class="ip-status-indicator">
+                        <span class="pulse-indicator" id="pulse-ipv6"></span>
+                        <span id="indicator-text-ipv6">Detectando...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- MAIN DASHBOARD GRID -->
+        <main class="dashboard-grid">
+            <!-- CARD 1: INFORMAÇÕES DE REDE (ASN & ISP) -->
+            <section class="dash-card card-network">
+                <div class="card-header">
+                    <div class="card-title-icon">
+                        <i data-lucide="network"></i>
+                    </div>
+                    <h2>Informações de Rede</h2>
+                </div>
+                <div class="card-body">
+                    <ul class="info-list">
+                        <li>
+                            <span class="info-label">Provedor / ISP</span>
+                            <span class="info-value text-glow" id="net-isp">Carregando...</span>
+                        </li>
+                        <li>
+                            <span class="info-label">Número AS (ASN)</span>
+                            <span class="info-value" id="net-asn">
+                                <span class="badge badge-asn" id="asn-value">...</span>
+                            </span>
+                        </li>
+                        <li>
+                            <span class="info-label">Bloco BGP Padrão</span>
+                            <span class="info-value code-font" id="net-prefix">Carregando...</span>
+                        </li>
+                        <li>
+                            <span class="info-label">Localização Oficial</span>
+                            <span class="info-value" id="net-location">Carregando...</span>
+                        </li>
+                        <li>
+                            <span class="info-label">DNS Resolver Detectado</span>
+                            <span class="info-value text-glow" id="net-dns">Carregando...</span>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- CARD 2: BGP & RPKI -->
+            <section class="dash-card card-bgp">
+                <div class="card-header">
+                    <div class="card-title-icon">
+                        <i data-lucide="shield-check"></i>
+                    </div>
+                    <h2>Roteamento & RPKI</h2>
+                </div>
+                <div class="card-body">
+                    <ul class="info-list">
+                        <li>
+                            <span class="info-label">Bloco Mais Específico</span>
+                            <div class="info-wrapper">
+                                <span class="info-value code-font text-highlight" id="bgp-specific-prefix">Carregando...</span>
+                                <small class="info-helper">Menor bloco anunciado no BGP que contém seu IP</small>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="info-label">Status RPKI</span>
+                            <span class="info-value" id="bgp-rpki-status">
+                                <span class="badge badge-rpki" id="rpki-badge">Aguardando IP</span>
+                            </span>
+                        </li>
+                        <li>
+                            <span class="info-label">Visibilidade RIS Peers</span>
+                            <div class="info-wrapper">
+                                <div class="progress-container">
+                                    <div class="progress-bar" id="bgp-visibility-bar" style="width: 0%"></div>
+                                </div>
+                                <div class="progress-labels">
+                                    <span id="bgp-visibility-text">Carregando...</span>
+                                    <span id="bgp-visibility-percent">0%</span>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- CARD 3: BLACKLISTS DE SPAM -->
+            <section class="dash-card card-blacklist">
+                <div class="card-header">
+                    <div class="card-title-icon">
+                        <i data-lucide="shield-alert"></i>
+                    </div>
+                    <h2>Spam Blacklists (DNSBL)</h2>
+                    <div class="blacklist-selector">
+                        <select id="blacklist-ip-select" class="custom-select" aria-label="Selecionar IP para verificar blacklist">
+                            <option value="ipv4">Verificar IPv4</option>
+                            <option value="ipv6">Verificar IPv6</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="blacklist-summary">
+                        <span class="blacklist-summary-label">Status Geral:</span>
+                        <span class="badge" id="blacklist-overall-badge">Aguardando...</span>
+                    </div>
+                    <ul class="blacklist-list" id="blacklist-items-container">
+                        <!-- Blacklists loaded dynamically -->
+                        <li class="loading-item">Carregando lista de servidores...</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- CARD 4: GEOLOCALIZAÇÃO MAPA -->
+            <section class="dash-card card-map-container">
+                <div class="card-header">
+                    <div class="card-title-icon">
+                        <i data-lucide="map-pin"></i>
+                    </div>
+                    <h2>Geolocalização Física</h2>
+                </div>
+                <div class="card-body map-card-body">
+                    <div id="map" class="map-view"></div>
+                    <div class="map-coordinates">
+                        <div>
+                            <span class="coord-label">Coordenadas:</span>
+                            <span class="coord-value" id="map-coord-val">- / -</span>
+                        </div>
+                        <div>
+                            <span class="coord-label">Fuso Horário:</span>
+                            <span class="coord-value" id="map-timezone-val">-</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="app-footer">
+            <p>MeuIP BGP Dashboard &copy; 2026 - Ferramenta avançada para ISPs, Administradores de Redes e Analistas BGP.</p>
+            <p class="footer-links">
+                Os dados de BGP e RPKI são fornecidos em tempo real pelas APIs do <a href="https://stat.ripe.net/" target="_blank" rel="noopener noreferrer">RIPE NCC</a>.
+            </p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification for Clipboard Copy -->
+    <div id="toast" class="toast-notification">
+        <i data-lucide="check-circle-2"></i>
+        <span id="toast-message">Texto copiado!</span>
+    </div>
+
+    <!-- Leaflet JS Map -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Lucide Icons Library -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Custom Application Javascript -->
+    <script src="app.js"></script>
+</body>
+</html>
