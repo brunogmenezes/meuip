@@ -102,6 +102,13 @@ function setupEventListeners() {
             runBlacklistCheck(targetIp, selectedType.toUpperCase());
         }
     });
+
+    // Handle map container resizing on viewport size change
+    window.addEventListener('resize', () => {
+        if (state.map && typeof state.map.invalidateSize === 'function') {
+            state.map.invalidateSize();
+        }
+    });
 }
 
 // Copy to Clipboard Utility
@@ -789,6 +796,11 @@ function fetchRpkiStatus(asn, prefix) {
 
 // Leaflet Map setup and update
 function updateMap(lat, lon, label) {
+    if (typeof L === 'undefined') {
+        console.error('Leaflet não está carregado. Não foi possível inicializar o mapa.');
+        return;
+    }
+    
     if (!state.map) {
         // Initialize Map
         state.map = L.map('map', {
@@ -818,12 +830,16 @@ function updateMap(lat, lon, label) {
         state.map.setView([lat, lon], 12);
     }
     
-    // Invalidate size helps fix leaflet initialization box errors when containers dynamically render
-    setTimeout(() => {
-        if (state.map) {
+    // Invalidate size helps fix leaflet initialization box errors when containers dynamically render/resize
+    const invalidate = () => {
+        if (state.map && typeof state.map.invalidateSize === 'function') {
             state.map.invalidateSize();
         }
-    }, 200);
+    };
+    
+    setTimeout(invalidate, 200);
+    setTimeout(invalidate, 800);
+    setTimeout(invalidate, 2000);
 }
 
 // Query local PHP backend to check IP against Spamhaus, SORBS, Spamcop, etc.

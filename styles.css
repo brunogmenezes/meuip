@@ -769,11 +769,12 @@ body {
     display: flex;
     flex-direction: column;
     padding: 0 !important; /* Overflow hidden so map behaves */
-    height: 380px;
+    height: auto;
+    min-height: 380px;
 }
 
 .map-view {
-    flex: 1;
+    height: 320px;
     width: 100%;
     background: #06090f;
     z-index: 1;
@@ -1056,6 +1057,11 @@ body {
     }
     
     .map-card-body {
-        height: 300px;
+        height: auto !important;
+        min-height: auto !important;
+    }
+    
+    .map-view {
+        height: 250px !important;
     }
 }

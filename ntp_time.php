@@ -27,7 +27,7 @@ function query_ntp_server($host) {
         return null;
     }
     
-    stream_set_timeout($socket, 1.5);
+    stream_set_timeout($socket, 1, 500000);
     $t1 = microtime(true);
     
     if (!@fwrite($socket, $data)) {
