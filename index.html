@@ -203,13 +203,22 @@
                 <div class="card-body map-card-body">
                     <div id="map" class="map-view"></div>
                     <div class="map-coordinates">
-                        <div>
+                        <div class="coord-row">
                             <span class="coord-label">Coordenadas:</span>
                             <span class="coord-value" id="map-coord-val">- / -</span>
                         </div>
-                        <div>
+                        <div class="coord-row">
                             <span class="coord-label">Fuso Horário:</span>
                             <span class="coord-value" id="map-timezone-val">-</span>
+                        </div>
+                        <div class="coord-row ntp-row" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 4px; padding-top: 6px;">
+                            <div>
+                                <span class="coord-label"><i data-lucide="clock" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:3px;"></i> Hora NTP.br:</span>
+                                <span class="coord-value code-font" id="ntp-clock" style="font-weight:600; color:var(--color-primary);">--:--:--</span>
+                            </div>
+                            <div id="ntp-status-container">
+                                <span class="badge" id="ntp-status-badge" style="font-size:0.7rem; padding: 0.15rem 0.5rem; font-weight:700;">Aguardando...</span>
+                            </div>
                         </div>
                     </div>
                 </div>

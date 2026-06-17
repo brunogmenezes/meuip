@@ -57,6 +57,8 @@ const elements = {
     // Map Card
     mapCoordVal: document.getElementById('map-coord-val'),
     mapTimezoneVal: document.getElementById('map-timezone-val'),
+    ntpClock: document.getElementById('ntp-clock'),
+    ntpStatusBadge: document.getElementById('ntp-status-badge'),
     
     // Toast
     toast: document.getElementById('toast'),
@@ -328,6 +330,89 @@ async function detectDnsResolver() {
     }
 }
 
+let ntpTimeOffset = 0; // offset in seconds
+let ntpClockInterval = null;
+
+// Synchronize browser clock with NTP.br via local PHP proxy
+async function syncNtpTime() {
+    elements.ntpStatusBadge.textContent = 'Sincronizando...';
+    elements.ntpStatusBadge.className = 'badge';
+    elements.ntpStatusBadge.style.backgroundColor = 'rgba(251, 191, 36, 0.1)';
+    elements.ntpStatusBadge.style.color = 'var(--color-warning)';
+    elements.ntpStatusBadge.style.borderColor = 'rgba(251, 191, 36, 0.2)';
+    
+    const tStart = Date.now() / 1000;
+    
+    try {
+        const res = await fetch('ntp_time.php');
+        if (!res.ok) throw new Error('Falha HTTP');
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            const tEnd = Date.now() / 1000;
+            const rtt = tEnd - tStart;
+            
+            // Estimated atomic timestamp when request completes (rtt/2 latency adjustment)
+            const atomicTime = parseFloat(data.ntp_time) + (rtt / 2);
+            
+            // Offset between atomic time and client local time
+            ntpTimeOffset = atomicTime - tEnd;
+            
+            const absOffset = Math.abs(ntpTimeOffset);
+            
+            if (absOffset < 1.0) {
+                elements.ntpStatusBadge.textContent = 'Sincronizado';
+                elements.ntpStatusBadge.style.backgroundColor = 'var(--color-success-bg)';
+                elements.ntpStatusBadge.style.color = 'var(--color-success)';
+                elements.ntpStatusBadge.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+            } else {
+                const diffText = ntpTimeOffset > 0 ? `+${absOffset.toFixed(1)}s` : `-${absOffset.toFixed(1)}s`;
+                elements.ntpStatusBadge.textContent = `Desajuste: ${diffText}`;
+                elements.ntpStatusBadge.style.backgroundColor = 'var(--color-danger-bg)';
+                elements.ntpStatusBadge.style.color = 'var(--color-danger)';
+                elements.ntpStatusBadge.style.borderColor = 'rgba(244, 63, 94, 0.2)';
+            }
+            
+            startNtpClock();
+        } else {
+            elements.ntpStatusBadge.textContent = 'Erro NTP';
+            elements.ntpStatusBadge.style.backgroundColor = 'var(--color-danger-bg)';
+            elements.ntpStatusBadge.style.color = 'var(--color-danger)';
+        }
+    } catch (e) {
+        console.warn('Erro ao sincronizar com NTP.br:', e);
+        elements.ntpStatusBadge.textContent = 'Sem Sync';
+        elements.ntpStatusBadge.style.backgroundColor = 'var(--color-danger-bg)';
+        elements.ntpStatusBadge.style.color = 'var(--color-danger)';
+        
+        ntpTimeOffset = 0;
+        startNtpClock();
+    }
+}
+
+function startNtpClock() {
+    if (ntpClockInterval) {
+        clearInterval(ntpClockInterval);
+    }
+    
+    updateNtpClockDisplay();
+    ntpClockInterval = setInterval(updateNtpClockDisplay, 1000);
+}
+
+function updateNtpClockDisplay() {
+    const currentNtpTimeMs = (Date.now() / 1000 + ntpTimeOffset) * 1000;
+    const date = new Date(currentNtpTimeMs);
+    
+    const options = {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    };
+    
+    elements.ntpClock.textContent = date.toLocaleTimeString('pt-BR', options);
+}
+
 // Main IP Detection Logic
 async function detectIPs() {
     // Show Loading states
@@ -432,7 +517,8 @@ async function detectIPs() {
     if (state.activeIp) {
         await Promise.all([
             loadIpNetworkAndBgpData(state.activeIp),
-            detectDnsResolver()
+            detectDnsResolver(),
+            syncNtpTime()
         ]);
     } else {
         setSkeletons(false);
@@ -574,7 +660,24 @@ async function loadIpNetworkAndBgpData(ip) {
                 if (geoloc.latitude && geoloc.longitude) {
                     updateMap(geoloc.latitude, geoloc.longitude, `${geoloc.city}, ${geoloc.country}`);
                     elements.mapCoordVal.textContent = `${geoloc.latitude.toFixed(5)}, ${geoloc.longitude.toFixed(5)}`;
-                    elements.mapTimezoneVal.textContent = `${geoloc.timezone || '-'} (UTC ${geoloc.timezone_offset || ''})`;
+                    
+                    let timezoneText = `${geoloc.timezone || '-'} (UTC ${geoloc.timezone_offset || ''})`;
+                    // Fallback to browser timezone if geoloc returned UTC/empty
+                    if (!geoloc.timezone || geoloc.timezone === 'UTC') {
+                        try {
+                            const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                            const offsetMinutes = -new Date().getTimezoneOffset();
+                            const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+                            const offsetMins = Math.abs(offsetMinutes) % 60;
+                            const sign = offsetMinutes >= 0 ? '+' : '-';
+                            const offsetStr = `${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+                            timezoneText = `${localTz} (UTC ${offsetStr})`;
+                        } catch (e) {
+                            console.warn('Erro ao obter fuso horário local:', e);
+                        }
+                    }
+                    
+                    elements.mapTimezoneVal.textContent = timezoneText;
                     elements.mapCoordVal.classList.remove('skeleton', 'skeleton-text');
                     elements.mapTimezoneVal.classList.remove('skeleton', 'skeleton-text');
                 }
