@@ -408,6 +408,27 @@ async function detectIPs() {
     // Setup Blacklist Selector options
     populateBlacklistSelector();
     
+    // Fetch ISP for secondary IP if both are available
+    if (ipv4 && ipv6) {
+        if (state.activeIpType === 'IPv4') {
+            fetch(`https://stat.ripe.net/data/prefix-overview/data.json?resource=${ipv6}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'ok' && data.data && data.data.asns && data.data.asns.length > 0) {
+                        elements.ispIpv6.textContent = `${data.data.asns[0].holder} (AS${data.data.asns[0].asn})`;
+                    }
+                }).catch(() => {});
+        } else {
+            fetch(`https://stat.ripe.net/data/prefix-overview/data.json?resource=${ipv4}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'ok' && data.data && data.data.asns && data.data.asns.length > 0) {
+                        elements.ispIpv4.textContent = `${data.data.asns[0].holder} (AS${data.data.asns[0].asn})`;
+                    }
+                }).catch(() => {});
+        }
+    }
+    
     if (state.activeIp) {
         await Promise.all([
             loadIpNetworkAndBgpData(state.activeIp),
@@ -470,161 +491,159 @@ function showErrorInCards(message) {
     elements.mapTimezoneVal.textContent = '-';
 }
 
-// Main orchestrator to fetch BGP, Geolocation & RPKI data for the active IP
+// Helper to update Network card fields and active Hero card ISP
+function updateNetworkFields(asn, holder, prefix) {
+    const ispText = holder ? `${holder} (AS${asn || ''})` : 'Provedor desconhecido';
+    
+    // Update active Hero Card ISP
+    if (state.activeIpType === 'IPv4') {
+        elements.ispIpv4.textContent = ispText;
+    } else {
+        elements.ispIpv6.textContent = ispText;
+    }
+    
+    // Update Network Card Info
+    elements.netIsp.textContent = holder || 'Não disponível';
+    elements.netIsp.classList.remove('skeleton', 'skeleton-text');
+    
+    if (asn) {
+        elements.netAsn.innerHTML = `<a href="https://stat.ripe.net/${asn}" target="_blank" rel="noopener noreferrer" class="badge badge-asn">AS${asn} <i data-lucide="external-link" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-left:2px;"></i></a>`;
+    } else {
+        elements.netAsn.textContent = 'Não anunciado';
+    }
+    elements.netAsn.classList.remove('skeleton', 'skeleton-badge');
+    
+    elements.netPrefix.textContent = prefix || 'Não anunciado';
+    elements.netPrefix.classList.remove('skeleton', 'skeleton-text');
+    
+    elements.bgpSpecificPrefix.textContent = prefix || 'Não anunciado';
+    elements.bgpSpecificPrefix.classList.remove('skeleton', 'skeleton-text');
+}
+
+// Main orchestrator to fetch BGP, Geolocation & RPKI data for the active IP (Progressive Rendering)
 async function loadIpNetworkAndBgpData(ip) {
     setSkeletons(true);
     
-    try {
-        // Fetch Geolocation and Prefix details concurrently
-        const geolocPromise = fetchGeolocWithFallback(ip);
-            
-        const prefixPromise = fetch(`https://stat.ripe.net/data/prefix-overview/data.json?resource=${ip}`)
-            .then(res => res.json())
-            .catch(err => {
-                console.error('Erro ao buscar dados RIPE prefix-overview:', err);
-                return null;
-            });
-            
-        const routingPromise = fetch(`https://stat.ripe.net/data/routing-status/data.json?resource=${ip}`)
-            .then(res => res.json())
-            .catch(err => {
-                console.error('Erro ao buscar dados RIPE routing-status:', err);
-                return null;
-            });
-
-        const [geoloc, rPrefix, rRouting] = await Promise.all([geolocPromise, prefixPromise, routingPromise]);
-        
-        state.geolocData = geoloc;
-        
-        let asn = null;
-        let asnHolder = null;
-        let bgpPrefix = null;
-        
-        // Parse RIPE Prefix Overview
-        if (rPrefix && rPrefix.status === 'ok' && rPrefix.data) {
-            const rData = rPrefix.data;
-            if (rData.asns && rData.asns.length > 0) {
-                asn = rData.asns[0].asn;
-                asnHolder = rData.asns[0].holder;
-            }
-            bgpPrefix = rData.resource;
-        }
-        
-        // Fallback to Geolocation ASN details if RIPE is empty (e.g. non-announced local blocks)
-        if (!asn && geoloc && geoloc.success && geoloc.connection) {
-            asn = geoloc.connection.asn;
-            asnHolder = geoloc.connection.org || geoloc.connection.isp;
-        }
-        
-        // Update ISP texts on the Hero Cards
-        const ispText = asnHolder ? `${asnHolder} (AS${asn || ''})` : 'Provedor desconhecido';
-        if (state.activeIpType === 'IPv4') {
-            elements.ispIpv4.textContent = ispText;
-            // Fetch secondary provider if available
-            if (state.ipv6) {
-                fetch(`https://ipwho.is/${state.ipv6}`)
-                    .then(res => res.json())
-                    .then(g => {
-                        if (g.success && g.connection) {
-                            elements.ispIpv6.textContent = `${g.connection.org || g.connection.isp} (AS${g.connection.asn})`;
-                        }
-                    }).catch(() => {});
-            }
-        } else {
-            elements.ispIpv6.textContent = ispText;
-            if (state.ipv4) {
-                fetch(`https://ipwho.is/${state.ipv4}`)
-                    .then(res => res.json())
-                    .then(g => {
-                        if (g.success && g.connection) {
-                            elements.ispIpv4.textContent = `${g.connection.org || g.connection.isp} (AS${g.connection.asn})`;
-                        }
-                    }).catch(() => {});
-            }
-        }
-
-        // 1. Render Network Card Info
-        elements.netIsp.textContent = asnHolder || 'Não disponível';
-        
-        if (asn) {
-            elements.netAsn.innerHTML = `<a href="https://stat.ripe.net/${asn}" target="_blank" rel="noopener noreferrer" class="badge badge-asn">AS${asn} <i data-lucide="external-link" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-left:2px;"></i></a>`;
-        } else {
-            elements.netAsn.textContent = 'Não anunciado';
-        }
-        
-        elements.netPrefix.textContent = bgpPrefix || 'Não anunciado';
-        
-        if (geoloc && geoloc.success) {
-            const flagImg = geoloc.flag?.img ? `<img src="${geoloc.flag.img}" alt="${geoloc.country_code}" class="flag-icon" style="width:20px; vertical-align:middle; margin-right:6px; border-radius:3px; border:1px solid rgba(255,255,255,0.1)">` : '';
-            elements.netLocation.innerHTML = `${flagImg} ${geoloc.city || ''}, ${geoloc.region || ''} - ${geoloc.country || ''}`;
-        } else {
-            elements.netLocation.textContent = 'Localização indisponível';
-        }
-        
-        // 2. Render BGP & RPKI details
-        elements.bgpSpecificPrefix.textContent = bgpPrefix || 'Não anunciado';
-        
-        // Fetch and render RPKI validation status
-        if (asn && bgpPrefix) {
-            fetchRpkiStatus(asn, bgpPrefix);
-        } else {
-            elements.rpkiBadge.textContent = 'Sem ASN/Filtro';
-            elements.rpkiBadge.setAttribute('data-rpki', 'unknown');
-        }
-        
-        // Render BGP visibility from RIS Peers
-        if (rRouting && rRouting.status === 'ok' && rRouting.data && rRouting.data.visibility) {
-            const vData = rRouting.data.visibility;
-            const isV6 = state.activeIpType === 'IPv6';
-            const vObj = isV6 ? vData.v6 : vData.v4;
-            
-            if (vObj && vObj.total_ris_peers > 0) {
-                const seeing = vObj.ris_peers_seeing;
-                const total = vObj.total_ris_peers;
-                const percentage = Math.round((seeing / total) * 100);
+    let resolvedAsn = null;
+    let resolvedPrefix = null;
+    let resolvedHolder = null;
+    
+    // 1. Handle Prefix Overview (ASN, ISP, Prefix) - Render ASAP
+    const prefixPromise = fetch(`https://stat.ripe.net/data/prefix-overview/data.json?resource=${ip}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok' && data.data) {
+                const rData = data.data;
+                if (rData.asns && rData.asns.length > 0) {
+                    resolvedAsn = rData.asns[0].asn;
+                    resolvedHolder = rData.asns[0].holder;
+                }
+                resolvedPrefix = rData.resource;
                 
-                elements.bgpVisibilityBar.style.width = `${percentage}%`;
-                elements.bgpVisibilityText.textContent = `${seeing} de ${total} roteadores RIS`;
-                elements.bgpVisibilityPercent.textContent = `${percentage}%`;
+                // Update network fields immediately
+                updateNetworkFields(resolvedAsn, resolvedHolder, resolvedPrefix);
+                
+                // Trigger RPKI fetch now that we have ASN and prefix
+                if (resolvedAsn && resolvedPrefix) {
+                    fetchRpkiStatus(resolvedAsn, resolvedPrefix);
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Erro ao buscar dados RIPE prefix-overview:', err);
+        });
+
+    // 2. Handle Geolocation (Location, Map, Coordinates, Timezone) - Render ASAP
+    const geolocPromise = fetchGeolocWithFallback(ip)
+        .then(geoloc => {
+            state.geolocData = geoloc;
+            if (geoloc && geoloc.success) {
+                // If Prefix Overview hasn't loaded ASN yet, use Geolocation's as fallback
+                if (!resolvedAsn && geoloc.connection) {
+                    resolvedAsn = geoloc.connection.asn;
+                    resolvedHolder = geoloc.connection.org || geoloc.connection.isp;
+                    updateNetworkFields(resolvedAsn, resolvedHolder, resolvedPrefix);
+                }
+                
+                // Render Location Info
+                const flagImg = geoloc.flag?.img ? `<img src="${geoloc.flag.img}" alt="${geoloc.country_code}" class="flag-icon" style="width:20px; vertical-align:middle; margin-right:6px; border-radius:3px; border:1px solid rgba(255,255,255,0.1)">` : '';
+                elements.netLocation.innerHTML = `${flagImg} ${geoloc.city || ''}, ${geoloc.region || ''} - ${geoloc.country || ''}`;
+                elements.netLocation.classList.remove('skeleton', 'skeleton-text');
+                
+                // Render Map
+                if (geoloc.latitude && geoloc.longitude) {
+                    updateMap(geoloc.latitude, geoloc.longitude, `${geoloc.city}, ${geoloc.country}`);
+                    elements.mapCoordVal.textContent = `${geoloc.latitude.toFixed(5)}, ${geoloc.longitude.toFixed(5)}`;
+                    elements.mapTimezoneVal.textContent = `${geoloc.timezone || '-'} (UTC ${geoloc.timezone_offset || ''})`;
+                    elements.mapCoordVal.classList.remove('skeleton', 'skeleton-text');
+                    elements.mapTimezoneVal.classList.remove('skeleton', 'skeleton-text');
+                }
+            } else {
+                elements.netLocation.textContent = 'Localização indisponível';
+                elements.netLocation.classList.remove('skeleton', 'skeleton-text');
+                elements.mapCoordVal.textContent = 'Indisponível';
+                elements.mapTimezoneVal.textContent = 'Indisponível';
+                elements.mapCoordVal.classList.remove('skeleton', 'skeleton-text');
+                elements.mapTimezoneVal.classList.remove('skeleton', 'skeleton-text');
+            }
+        })
+        .catch(err => {
+            console.error('Erro no geolocPromise handler:', err);
+        });
+
+    // 3. Handle Routing Status (RIS Peers, Specific Prefix)
+    const routingPromise = fetch(`https://stat.ripe.net/data/routing-status/data.json?resource=${ip}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok' && data.data && data.data.visibility) {
+                const vData = data.data.visibility;
+                const isV6 = state.activeIpType === 'IPv6';
+                const vObj = isV6 ? vData.v6 : vData.v4;
+                
+                if (vObj && vObj.total_ris_peers > 0) {
+                    const seeing = vObj.ris_peers_seeing;
+                    const total = vObj.total_ris_peers;
+                    const percentage = Math.round((seeing / total) * 100);
+                    
+                    elements.bgpVisibilityBar.style.width = `${percentage}%`;
+                    elements.bgpVisibilityText.textContent = `${seeing} de ${total} roteadores RIS`;
+                    elements.bgpVisibilityPercent.textContent = `${percentage}%`;
+                } else {
+                    elements.bgpVisibilityBar.style.width = '0%';
+                    elements.bgpVisibilityText.textContent = 'Sem visibilidade RIS';
+                    elements.bgpVisibilityPercent.textContent = '0%';
+                }
             } else {
                 elements.bgpVisibilityBar.style.width = '0%';
-                elements.bgpVisibilityText.textContent = 'Sem visibilidade RIS';
+                elements.bgpVisibilityText.textContent = 'Sem dados de visibilidade';
                 elements.bgpVisibilityPercent.textContent = '0%';
             }
-        } else {
+        })
+        .catch(err => {
+            console.error('Erro ao buscar dados RIPE routing-status:', err);
             elements.bgpVisibilityBar.style.width = '0%';
-            elements.bgpVisibilityText.textContent = 'Dados BGP indisponíveis';
+            elements.bgpVisibilityText.textContent = 'Erro ao carregar';
             elements.bgpVisibilityPercent.textContent = '0%';
-        }
-        
-        // 3. Render map location
-        if (geoloc && geoloc.success && geoloc.latitude && geoloc.longitude) {
-            updateMap(geoloc.latitude, geoloc.longitude, `${geoloc.city}, ${geoloc.country}`);
-            elements.mapCoordVal.textContent = `${geoloc.latitude.toFixed(5)}, ${geoloc.longitude.toFixed(5)}`;
-            elements.mapTimezoneVal.textContent = `${geoloc.timezone?.id || '-'} (UTC ${geoloc.timezone?.utc || ''})`;
-        } else {
-            elements.mapCoordVal.textContent = 'Indisponível';
-            elements.mapTimezoneVal.textContent = 'Indisponível';
-        }
-        
-        // Disable skeletons as loading is done
+        });
+
+    // Conclude all loading concurrently
+    Promise.all([prefixPromise, geolocPromise, routingPromise]).then(() => {
         setSkeletons(false);
         if (window.lucide) {
             window.lucide.createIcons();
         }
         
-        // 4. Run RBL Blacklist Check
+        // Run Blacklist Check
         const selectedType = elements.blacklistIpSelect.value;
         const blacklistTargetIp = selectedType === 'ipv6' ? state.ipv6 : state.ipv4;
         if (blacklistTargetIp) {
             runBlacklistCheck(blacklistTargetIp, selectedType.toUpperCase());
         }
-        
-    } catch (e) {
-        console.error('Erro na carga dos detalhes do IP:', e);
+    }).catch(err => {
+        console.error('Erro geral ao processar dados de rede:', err);
         setSkeletons(false);
-        showErrorInCards('Falha ao processar dados de rede.');
-    }
+        showErrorInCards('Falha ao processar alguns dados.');
+    });
 }
 
 // Fetch RPKI validation status via RIPE NCC API
