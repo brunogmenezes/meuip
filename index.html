@@ -40,6 +40,9 @@
                     <span class="status-dot"></span>
                     <span class="status-label">IPv6: Carregando</span>
                 </div>
+                <button id="btn-export-header" class="btn-refresh btn-export-header" title="Exportar Relatório PDF" aria-label="Exportar Relatório PDF" style="display: none;">
+                    <i data-lucide="file-text"></i>
+                </button>
                 <button id="btn-refresh" class="btn-refresh" title="Atualizar dados" aria-label="Atualizar dados">
                     <i data-lucide="rotate-cw"></i>
                 </button>
@@ -87,6 +90,23 @@
                     </div>
                 </div>
             </div>
+        </section>
+
+        <!-- DIAGNOSTIC ACTIONS BANNER (Shown when complete) -->
+        <section id="diagnostic-actions" class="diagnostic-actions-banner" style="display: none;">
+            <div class="actions-banner-content">
+                <div class="actions-banner-icon">
+                    <i data-lucide="check-circle-2"></i>
+                </div>
+                <div class="actions-banner-text">
+                    <h3>Diagnóstico de Rede Concluído</h3>
+                    <p>Todos os testes de conectividade, roteamento BGP, geolocalização e reputação RBL foram finalizados. Você pode exportar o relatório técnico em PDF para enviar ao seu administrador de rede.</p>
+                </div>
+            </div>
+            <button id="btn-export-pdf" class="btn-export-pdf-primary" title="Exportar Relatório PDF">
+                <i data-lucide="file-down"></i>
+                <span>Exportar Diagnóstico (PDF)</span>
+            </button>
         </section>
 
         <!-- MAIN DASHBOARD GRID -->
@@ -244,6 +264,9 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Lucide Icons Library -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- jsPDF and jsPDF-AutoTable for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <!-- Custom Application Javascript -->
     <script src="app.js"></script>
 </body>

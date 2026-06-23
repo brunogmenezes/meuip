@@ -1019,6 +1019,107 @@ body {
     }
 }
 
+/* DIAGNOSTIC ACTIONS BANNER & BUTTONS */
+.diagnostic-actions-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(16, 185, 129, 0.04);
+    border: 1px solid rgba(16, 185, 129, 0.15);
+    border-radius: 20px;
+    padding: 1.5rem 2rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-main), 0 0 20px rgba(16, 185, 129, 0.05);
+    animation: banner-slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    gap: 1.5rem;
+}
+
+@keyframes banner-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(-15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.actions-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex: 1;
+}
+
+.actions-banner-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 48px;
+    height: 48px;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 12px;
+    color: var(--color-success);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
+}
+
+.actions-banner-icon i {
+    width: 24px;
+    height: 24px;
+}
+
+.actions-banner-text h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--text-main);
+}
+
+.actions-banner-text p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.btn-export-pdf-primary {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--gradient-primary);
+    border: none;
+    color: #080c14;
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+    transition: var(--transition-smooth);
+    white-space: nowrap;
+}
+
+.btn-export-pdf-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+}
+
+.btn-export-pdf-primary:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.btn-export-header:hover {
+    color: var(--color-success) !important;
+    border-color: rgba(16, 185, 129, 0.3) !important;
+    background: rgba(16, 185, 129, 0.08) !important;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.2) !important;
+    transform: translateY(-1px);
+}
+
 /* RESPONSIVE DESIGN */
 @media (max-width: 1024px) {
     .app-container {
@@ -1063,5 +1164,21 @@ body {
     
     .map-view {
         height: 250px !important;
+    }
+
+    .diagnostic-actions-banner {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 1.25rem;
+        gap: 1.25rem;
+    }
+    
+    .actions-banner-content {
+        align-items: flex-start;
+    }
+    
+    .btn-export-pdf-primary {
+        width: 100%;
+        padding: 0.85rem;
     }
 }

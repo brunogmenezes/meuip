@@ -14,7 +14,11 @@ const state = {
     mapMarker: null,
     isFirstLoad: true,
     bgpData: null,
-    geolocData: null
+    geolocData: null,
+    blacklistResults: null,
+    blacklistTotalListed: 0,
+    blacklistCheckedIp: null,
+    blacklistCheckedType: null
 };
 
 // DOM Elements
@@ -62,7 +66,12 @@ const elements = {
     
     // Toast
     toast: document.getElementById('toast'),
-    toastMessage: document.getElementById('toast-message')
+    toastMessage: document.getElementById('toast-message'),
+    
+    // PDF Export
+    exportBanner: document.getElementById('diagnostic-actions'),
+    btnExportPdf: document.getElementById('btn-export-pdf'),
+    btnExportHeader: document.getElementById('btn-export-header')
 };
 
 // Initialize Application
@@ -101,6 +110,14 @@ function setupEventListeners() {
         if (targetIp) {
             runBlacklistCheck(targetIp, selectedType.toUpperCase());
         }
+    });
+
+    // Export PDF Buttons
+    elements.btnExportPdf.addEventListener('click', () => {
+        generateDiagnosticPDF();
+    });
+    elements.btnExportHeader.addEventListener('click', () => {
+        generateDiagnosticPDF();
     });
 
     // Handle map container resizing on viewport size change
@@ -422,6 +439,16 @@ function updateNtpClockDisplay() {
 
 // Main IP Detection Logic
 async function detectIPs() {
+    // Hide export actions
+    if (elements.exportBanner) elements.exportBanner.style.display = 'none';
+    if (elements.btnExportHeader) elements.btnExportHeader.style.display = 'none';
+    
+    // Reset PDF data state
+    state.blacklistResults = null;
+    state.blacklistTotalListed = 0;
+    state.blacklistCheckedIp = null;
+    state.blacklistCheckedType = null;
+
     // Show Loading states
     setSkeletons(true);
     elements.btnRefresh.classList.add('loading');
@@ -865,6 +892,11 @@ function runBlacklistCheck(ip, type) {
         })
         .then(data => {
             if (data.status === 'success') {
+                state.blacklistResults = data.blacklists;
+                state.blacklistTotalListed = data.total_listed;
+                state.blacklistCheckedIp = ip;
+                state.blacklistCheckedType = type;
+
                 renderBlacklistItems(data.blacklists);
                 
                 // Update overall badge
@@ -875,13 +907,18 @@ function runBlacklistCheck(ip, type) {
                     elements.blacklistOverallBadge.textContent = 'Limpo';
                     elements.blacklistOverallBadge.setAttribute('data-status', 'clean');
                 }
+
+                // Trigger diagnosis complete to show export PDF actions
+                onDiagnosisComplete();
             } else {
                 showBlacklistError(data.message || 'Erro na verificação do backend.');
+                onDiagnosisComplete();
             }
         })
         .catch(err => {
             console.error('Erro de Blacklist:', err);
             showBlacklistError('Erro ao comunicar com blacklist.php. Certifique-se de que o WAMP esteja ativo.');
+            onDiagnosisComplete();
         });
 }
 
@@ -964,4 +1001,233 @@ if (!document.getElementById('spin-keyframe')) {
         }
     `;
     document.head.appendChild(style);
+}
+
+// Shows the PDF export banner and header button once the entire diagnosis is complete
+function onDiagnosisComplete() {
+    if (elements.exportBanner) elements.exportBanner.style.display = 'flex';
+    if (elements.btnExportHeader) elements.btnExportHeader.style.display = 'flex';
+    
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+}
+
+// Generates a well-formatted vector PDF report with all diagnosis data
+function generateDiagnosticPDF() {
+    if (typeof window.jspdf === 'undefined') {
+        showToast('Erro: Biblioteca PDF não carregada.');
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+    });
+
+    // Brand colors
+    const primaryColor = [15, 23, 42]; // Slate 800
+    const accentColor = [0, 242, 254]; // Cyan
+    const secondaryColor = [79, 172, 254]; // Blue
+    const mutedColor = [100, 116, 139]; // Slate 500
+    const textColor = [51, 65, 85]; // Slate 700
+
+    // Design Header Accent Line
+    doc.setFillColor(79, 172, 254);
+    doc.rect(0, 0, 210, 4, 'F');
+
+    // Title
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text('Relatório de Diagnóstico de Rede', 15, 20);
+
+    // Subtitle
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+    doc.text('MeuIP BGP Dashboard • Análise Avançada de Conectividade e Roteamento', 15, 25);
+
+    // Horizontal Divider Line
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(15, 28, 195, 28);
+
+    // Collect variables
+    const localTime = new Date().toLocaleString('pt-BR');
+    const ntpTimeText = elements.ntpClock ? elements.ntpClock.textContent : '--:--:--';
+    const ntpStatus = elements.ntpStatusBadge ? elements.ntpStatusBadge.textContent : 'Sem Sync';
+    const activeIP = state.activeIp || 'Não disponível';
+    const activeIPType = state.activeIpType || '-';
+    const ispName = elements.netIsp ? elements.netIsp.textContent : 'Desconhecido';
+
+    // Print Metadata details
+    doc.setFontSize(8.5);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+
+    doc.setFont('Helvetica', 'bold');
+    doc.text('IP Diagnosticado:', 15, 35);
+    doc.setFont('Helvetica', 'normal');
+    doc.text(`${activeIP} (${activeIPType})`, 42, 35);
+
+    doc.setFont('Helvetica', 'bold');
+    doc.text('Provedor (ISP):', 15, 40);
+    doc.setFont('Helvetica', 'normal');
+    doc.text(ispName, 42, 40);
+
+    doc.setFont('Helvetica', 'bold');
+    doc.text('Data/Hora Local:', 115, 35);
+    doc.setFont('Helvetica', 'normal');
+    doc.text(localTime, 142, 35);
+
+    doc.setFont('Helvetica', 'bold');
+    doc.text('Hora NTP.br:', 115, 40);
+    doc.setFont('Helvetica', 'normal');
+    doc.text(`${ntpTimeText} (${ntpStatus})`, 142, 40);
+
+    // Table 1: Connectivity & Geolocation
+    const connRows = [
+        ['Endereço IPv4 de Conexão', state.ipv4 || 'Não disponível'],
+        ['Endereço IPv6 de Conexão', state.ipv6 || 'Não disponível'],
+        ['Provedor / ISP Titular', elements.netIsp ? elements.netIsp.textContent : 'Não disponível'],
+        ['Sistema Autônomo (ASN)', elements.netAsn ? elements.netAsn.innerText.trim() : 'Não anunciado'],
+        ['Localização Oficial', elements.netLocation ? elements.netLocation.innerText.trim() : 'Indisponível'],
+        ['Coordenadas Geográficas', elements.mapCoordVal ? elements.mapCoordVal.textContent : '- / -'],
+        ['Fuso Horário Local', elements.mapTimezoneVal ? elements.mapTimezoneVal.textContent : '-'],
+        ['DNS Resolver Detectado', elements.netDns ? elements.netDns.innerText.trim().replace(/\n/g, ' ') : 'Não detectado']
+    ];
+
+    doc.autoTable({
+        startY: 46,
+        theme: 'striped',
+        head: [['Parâmetro de Rede', 'Detalhes da Conectividade']],
+        body: connRows,
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { textColor: [51, 65, 85], fontSize: 8, cellPadding: 1.8 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+            0: { fontStyle: 'bold', width: 60 }
+        },
+        margin: { left: 15, right: 15 }
+    });
+
+    // Table 2: Routing & BGP Security
+    const bgpRows = [
+        ['Bloco BGP Geral (RIPE)', elements.netPrefix ? elements.netPrefix.textContent : 'N/A'],
+        ['Bloco BGP Mais Específico', elements.bgpSpecificPrefix ? elements.bgpSpecificPrefix.textContent : 'N/A'],
+        ['Status de Validação RPKI', elements.rpkiBadge ? elements.rpkiBadge.textContent : 'N/A'],
+        ['Visibilidade BGP (RIS Peers)', `${elements.bgpVisibilityText ? elements.bgpVisibilityText.textContent : 'N/A'} (${elements.bgpVisibilityPercent ? elements.bgpVisibilityPercent.textContent : '0%'})`]
+    ];
+
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 6,
+        theme: 'striped',
+        head: [['Roteamento & Segurança BGP (RIPE NCC)', 'Status e Métricas']],
+        body: bgpRows,
+        headStyles: { fillColor: [79, 172, 254], textColor: [8, 12, 20], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { textColor: [51, 65, 85], fontSize: 8, cellPadding: 1.8 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+            0: { fontStyle: 'bold', width: 60 }
+        },
+        margin: { left: 15, right: 15 },
+        didParseCell: function(data) {
+            if (data.section === 'body' && data.column.index === 1) {
+                const cellText = data.cell.text[0] || '';
+                if (cellText.includes('VÁLIDO')) {
+                    data.cell.styles.textColor = [16, 185, 129]; // Green
+                    data.cell.styles.fontStyle = 'bold';
+                } else if (cellText.includes('INVÁLIDO')) {
+                    data.cell.styles.textColor = [244, 63, 94]; // Red
+                    data.cell.styles.fontStyle = 'bold';
+                } else if (cellText.includes('NÃO ASSINADO') || cellText.includes('Sem dados')) {
+                    data.cell.styles.textColor = [217, 119, 6]; // Amber/Yellow
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+        }
+    });
+
+    // Table 3: Spam Blacklists
+    const blacklistRows = [];
+    const blIP = state.blacklistCheckedIp || activeIP;
+    const blType = state.blacklistCheckedType || activeIPType;
+    const blOverall = elements.blacklistOverallBadge ? elements.blacklistOverallBadge.textContent : 'Desconhecido';
+
+    if (state.blacklistResults) {
+        for (const [name, result] of Object.entries(state.blacklistResults)) {
+            let statusText = 'Limpo';
+            if (result.status === 'listed') {
+                statusText = `LISTADO (${result.details || ''})`;
+            } else if (result.status === 'blocked') {
+                statusText = `Consulta Bloqueada (${result.details || ''})`;
+            } else if (result.status === 'unsupported') {
+                statusText = `Ignorado (${result.details || ''})`;
+            }
+            blacklistRows.push([
+                name,
+                statusText,
+                result.description || ''
+            ]);
+        }
+    } else {
+        blacklistRows.push(['Nenhuma consulta efetuada', '-', '-']);
+    }
+
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 6,
+        theme: 'striped',
+        head: [[`Status de Reputação RBL para ${blType}: ${blIP}`, `Status (Geral: ${blOverall})`, 'Descrição da Lista (RBL)']],
+        body: blacklistRows,
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { textColor: [51, 65, 85], fontSize: 8, cellPadding: 1.8 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+            0: { fontStyle: 'bold', width: 45 },
+            1: { width: 45 }
+        },
+        margin: { left: 15, right: 15 },
+        didParseCell: function(data) {
+            if (data.section === 'body' && data.column.index === 1) {
+                const cellText = data.cell.text[0] || '';
+                if (cellText.startsWith('Limpo')) {
+                    data.cell.styles.textColor = [16, 185, 129]; // Green
+                    data.cell.styles.fontStyle = 'bold';
+                } else if (cellText.startsWith('LISTADO')) {
+                    data.cell.styles.textColor = [244, 63, 94]; // Red
+                    data.cell.styles.fontStyle = 'bold';
+                } else if (cellText.startsWith('Consulta Bloqueada') || cellText.startsWith('Bloqueado')) {
+                    data.cell.styles.textColor = [217, 119, 6]; // Amber
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+        }
+    });
+
+    // Technical Disclaimer Note at the bottom
+    const finalY = doc.lastAutoTable.finalY || 220;
+    doc.setFontSize(7.5);
+    doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+    
+    // Safety check for space remaining on A4 page (A4 height is 297mm)
+    let disclaimerY = finalY + 10;
+    if (disclaimerY > 265) {
+        doc.addPage();
+        disclaimerY = 20;
+    }
+
+    doc.setFont('Helvetica', 'bold');
+    doc.text('Nota de Análise Técnica:', 15, disclaimerY);
+    doc.setFont('Helvetica', 'normal');
+    
+    const noteText = 'Este relatório técnico consolida informações coletadas em tempo real pelas APIs do RIPE NCC, RBLs públicas de e-mail e servidores NTP.br. Ele serve como documentação de diagnóstico para analistas e administradores de rede (NetAdmins) avaliarem eventuais anomalias de roteamento, assinaturas RPKI ausentes/inválidas ou listagens de reputação (RBL) que possam impactar o envio de e-mails ou a navegabilidade da rede.';
+    const splitNote = doc.splitTextToSize(noteText, 180);
+    doc.text(splitNote, 15, disclaimerY + 3.5);
+
+    // Save and download PDF
+    const safeIP = activeIP.replace(/[:.]/g, '_');
+    doc.save(`diagnostico-rede-${safeIP}.pdf`);
+    showToast('Relatório PDF exportado com sucesso!');
 }
