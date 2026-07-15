@@ -18,7 +18,8 @@ const state = {
     blacklistResults: null,
     blacklistTotalListed: 0,
     blacklistCheckedIp: null,
-    blacklistCheckedType: null
+    blacklistCheckedType: null,
+    srcPort: null
 };
 
 // DOM Elements
@@ -45,6 +46,10 @@ const elements = {
     netPrefix: document.getElementById('net-prefix'),
     netLocation: document.getElementById('net-location'),
     netDns: document.getElementById('net-dns'),
+
+    // Source Port (inside IP cards)
+    srcPortIpv4: document.getElementById('src-port-ipv4'),
+    srcPortIpv6: document.getElementById('src-port-ipv6'),
     
     // BGP & RPKI Card
     bgpSpecificPrefix: document.getElementById('bgp-specific-prefix'),
@@ -97,10 +102,16 @@ function setupEventListeners() {
     
     // Copy Buttons
     elements.btnCopyIpv4.addEventListener('click', () => {
-        copyToClipboard(elements.valIpv4.textContent, 'IPv4 copiado!');
+        const ip = elements.valIpv4.textContent;
+        const port = state.srcPort || '—';
+        const text = `IP: ${ip}\nPorta de Origem: ${port}`;
+        copyToClipboard(text, 'IPv4 + porta copiados!');
     });
     elements.btnCopyIpv6.addEventListener('click', () => {
-        copyToClipboard(elements.valIpv6.textContent, 'IPv6 copiado!');
+        const ip = elements.valIpv6.textContent;
+        const port = state.srcPort || '—';
+        const text = `IP: ${ip}\nPorta de Origem: ${port}`;
+        copyToClipboard(text, 'IPv6 + porta copiados!');
     });
     
     // Blacklist IP Selector
@@ -330,6 +341,35 @@ async function fetchGeolocWithFallback(ip) {
     return { success: false, message: 'Localização indisponível' };
 }
 
+// Fetch the client's TCP source port via local PHP backend
+async function fetchSourcePort() {
+    const setPortDisplay = (port) => {
+        const val = port ? String(port) : '—';
+        [elements.srcPortIpv4, elements.srcPortIpv6].forEach(el => {
+            if (!el) return;
+            el.querySelector('.ip-src-port-val').textContent = val;
+        });
+    };
+
+    try {
+        const res = await fetch('port_info.php?_=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        if (data.status === 'ok' && data.remote_port) {
+            state.srcPort = data.remote_port;
+            setPortDisplay(data.remote_port);
+        } else {
+            state.srcPort = null;
+            setPortDisplay(null);
+        }
+    } catch (e) {
+        console.warn('Erro ao obter porta de origem:', e);
+        state.srcPort = null;
+        setPortDisplay(null);
+    }
+}
+
 // Fetch Client DNS Resolver using edns.ip-api.com
 async function detectDnsResolver() {
     elements.netDns.textContent = 'Buscando...';
@@ -552,6 +592,7 @@ async function detectIPs() {
         await Promise.all([
             loadIpNetworkAndBgpData(state.activeIp),
             detectDnsResolver(),
+            fetchSourcePort(),
             syncNtpTime()
         ]);
     } else {
@@ -1087,10 +1128,18 @@ function generateDiagnosticPDF() {
     doc.setFont('Helvetica', 'normal');
     doc.text(`${ntpTimeText} (${ntpStatus})`, 142, 40);
 
+    doc.setFont('Helvetica', 'bold');
+    doc.text('Porta de Origem TCP:', 15, 45);
+    doc.setFont('Helvetica', 'normal');
+    doc.setTextColor(0, 150, 160);
+    doc.text(state.srcPort ? String(state.srcPort) : 'Não detectada', 50, 45);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+
     // Table 1: Connectivity & Geolocation
     const connRows = [
         ['Endereço IPv4 de Conexão', state.ipv4 || 'Não disponível'],
         ['Endereço IPv6 de Conexão', state.ipv6 || 'Não disponível'],
+        ['Porta de Origem TCP', state.srcPort ? String(state.srcPort) : 'Não detectada'],
         ['Provedor / ISP Titular', elements.netIsp ? elements.netIsp.textContent : 'Não disponível'],
         ['Sistema Autônomo (ASN)', elements.netAsn ? elements.netAsn.innerText.trim() : 'Não anunciado'],
         ['Localização Oficial', elements.netLocation ? elements.netLocation.innerText.trim() : 'Indisponível'],
@@ -1100,7 +1149,7 @@ function generateDiagnosticPDF() {
     ];
 
     doc.autoTable({
-        startY: 46,
+        startY: 52,
         theme: 'striped',
         head: [['Parâmetro de Rede', 'Detalhes da Conectividade']],
         body: connRows,

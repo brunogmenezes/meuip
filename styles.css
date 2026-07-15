@@ -332,6 +332,31 @@ body {
     font-weight: 400;
 }
 
+.ip-src-port {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-dark);
+    letter-spacing: 0.02em;
+}
+
+.ip-src-port-label {
+    text-transform: uppercase;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    color: var(--text-dark);
+    font-family: var(--font-sans);
+}
+
+.ip-src-port-val {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: rgba(0, 242, 254, 0.45);
+    font-weight: 500;
+}
+
 .ip-card-footer {
     border-top: 1px solid rgba(255, 255, 255, 0.03);
     padding-top: 1rem;
