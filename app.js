@@ -19,7 +19,8 @@ const state = {
     blacklistTotalListed: 0,
     blacklistCheckedIp: null,
     blacklistCheckedType: null,
-    srcPort: null
+    srcPort: null,
+    ptrData: null
 };
 
 // DOM Elements
@@ -46,6 +47,8 @@ const elements = {
     netPrefix: document.getElementById('net-prefix'),
     netLocation: document.getElementById('net-location'),
     netDns: document.getElementById('net-dns'),
+    netPtr: document.getElementById('net-ptr'),
+    netPtrBadge: document.getElementById('net-ptr-badge'),
 
     // Source Port (inside IP cards)
     srcPortIpv4: document.getElementById('src-port-ipv4'),
@@ -163,7 +166,7 @@ function showToast(message) {
 function setSkeletons(active) {
     const targets = [
         elements.netIsp, elements.netAsn, elements.netPrefix, elements.netLocation,
-        elements.netDns,
+        elements.netDns, elements.netPtr,
         elements.bgpSpecificPrefix, elements.rpkiBadge,
         elements.mapCoordVal, elements.mapTimezoneVal
     ];
@@ -368,6 +371,57 @@ async function fetchSourcePort() {
         state.srcPort = null;
         setPortDisplay(null);
     }
+}
+
+// Reverse DNS (PTR) lookup via local PHP backend
+async function fetchPtrRecord(ip) {
+    if (!elements.netPtr || !ip) return;
+    elements.netPtr.textContent = 'Consultando...';
+    elements.netPtrBadge.style.display = 'none';
+
+    try {
+        const res = await fetch(`ptr_lookup.php?ip=${encodeURIComponent(ip)}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        state.ptrData = data;
+
+        if (data.status === 'ok' && data.has_ptr) {
+            // Show PTR hostname
+            elements.netPtr.innerHTML =
+                `<span class="code-font text-highlight">${data.ptr}</span>`;
+
+            // FCrDNS badge
+            elements.netPtrBadge.style.display = 'inline-block';
+            if (data.fcrdns) {
+                elements.netPtrBadge.textContent = '\u2714 FCrDNS OK';
+                elements.netPtrBadge.style.backgroundColor = 'var(--color-success-bg)';
+                elements.netPtrBadge.style.color = 'var(--color-success)';
+                elements.netPtrBadge.style.borderColor = 'rgba(16,185,129,0.25)';
+                elements.netPtrBadge.title = 'Forward-Confirmed rDNS: o PTR resolve de volta para o mesmo IP.';
+            } else {
+                elements.netPtrBadge.textContent = '\u26a0 FCrDNS Falhou';
+                elements.netPtrBadge.style.backgroundColor = 'var(--color-warning-bg)';
+                elements.netPtrBadge.style.color = 'var(--color-warning)';
+                elements.netPtrBadge.style.borderColor = 'rgba(251,191,36,0.25)';
+                elements.netPtrBadge.title = 'O PTR existe mas n\u00e3o resolve de volta para o mesmo IP (FCrDNS falhou).';
+            }
+        } else if (data.status === 'ok' && !data.has_ptr) {
+            elements.netPtr.textContent = 'Sem registro PTR';
+            elements.netPtrBadge.style.display = 'inline-block';
+            elements.netPtrBadge.textContent = '\u2716 Sem PTR';
+            elements.netPtrBadge.style.backgroundColor = 'var(--color-danger-bg)';
+            elements.netPtrBadge.style.color = 'var(--color-danger)';
+            elements.netPtrBadge.style.borderColor = 'rgba(244,63,94,0.25)';
+            elements.netPtrBadge.title = 'Nenhum registro PTR (DNS reverso) configurado para este IP.';
+        } else {
+            elements.netPtr.textContent = 'Erro ao consultar';
+        }
+    } catch (e) {
+        console.warn('Erro ao buscar PTR:', e);
+        elements.netPtr.textContent = 'Erro ao consultar';
+    }
+    elements.netPtr.classList.remove('skeleton', 'skeleton-text');
 }
 
 // Fetch Client DNS Resolver using edns.ip-api.com
@@ -593,6 +647,7 @@ async function detectIPs() {
             loadIpNetworkAndBgpData(state.activeIp),
             detectDnsResolver(),
             fetchSourcePort(),
+            fetchPtrRecord(state.activeIp),
             syncNtpTime()
         ]);
     } else {
@@ -1145,7 +1200,13 @@ function generateDiagnosticPDF() {
         ['Localização Oficial', elements.netLocation ? elements.netLocation.innerText.trim() : 'Indisponível'],
         ['Coordenadas Geográficas', elements.mapCoordVal ? elements.mapCoordVal.textContent : '- / -'],
         ['Fuso Horário Local', elements.mapTimezoneVal ? elements.mapTimezoneVal.textContent : '-'],
-        ['DNS Resolver Detectado', elements.netDns ? elements.netDns.innerText.trim().replace(/\n/g, ' ') : 'Não detectado']
+        ['DNS Resolver Detectado', elements.netDns ? elements.netDns.innerText.trim().replace(/\n/g, ' ') : 'Não detectado'],
+        ['DNS Reverso (PTR)', (() => {
+            if (!state.ptrData) return 'Não consultado';
+            if (!state.ptrData.has_ptr) return 'Sem registro PTR';
+            const fcr = state.ptrData.fcrdns ? ' [FCrDNS OK]' : ' [FCrDNS Falhou]';
+            return (state.ptrData.ptr || '') + fcr;
+        })()]
     ];
 
     doc.autoTable({
